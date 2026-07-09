@@ -1,0 +1,312 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id              String         @id @default(uuid())
+  userId          String         @unique  // e.g. VXR2601, CLNT2601
+  employeeNumber  Int                      // sequential: 1, 2, 3...
+  email           String         @unique
+  passwordHash    String
+  firstName       String
+  lastName        String
+  avatarUrl       String?
+  phone           String?
+  bio             String?
+  department      String?
+  role            String         @default("DEVELOPER")
+  permissions     String?        // JSON string: {"finance":true,"crm":true,...}
+  isActive        Boolean        @default(true)
+  organizationId  String
+  organization    Organization   @relation(fields: [organizationId], references: [id])
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  assignedLeads   Lead[]         @relation("LeadAssignee")
+  createdLeads    Lead[]         @relation("LeadCreator")
+
+  employeeProfile EmployeeProfile?
+  
+  tasksAssigned   Task[]         @relation("TaskAssignee")
+  projectsManaged Project[]      @relation("ProjectManager")
+
+  auditLogs       AuditLog[]
+  comments        Comment[]
+  ticketsManaged  Ticket[]       @relation("TicketAgent")
+  ticketsCreated  Ticket[]       @relation("TicketClient")
+
+  @@index([organizationId])
+}
+
+model Organization {
+  id           String        @id @default(uuid())
+  name         String
+  slug         String        @unique
+  logoUrl      String?
+  users        User[]
+  leads        Lead[]
+  projects     Project[]
+  clients      ClientProfile[]
+  invoices     Invoice[]
+  monitors     WebMonitor[]
+  automations  Automation[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model ClientProfile {
+  id             String        @id @default(uuid())
+  companyName    String
+  contactName    String
+  email          String        @unique
+  phone          String?
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  projects       Project[]
+  invoices       Invoice[]
+  contracts      Contract[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([organizationId])
+}
+
+model EmployeeProfile {
+  id             String        @id @default(uuid())
+  userId         String        @unique
+  user           User          @relation(fields: [userId], references: [id])
+  department     String
+  designation    String
+  joiningDate    DateTime
+  salary         Float
+  attendance     Attendance[]
+  leaves         Leave[]
+  documents      Document[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model Lead {
+  id             String        @id @default(uuid())
+  title          String
+  companyName    String
+  contactName    String
+  email          String
+  phone          String?
+  status         String        @default("NEW") // Stored as string, typed as LeadStatus in app
+  score          Int           @default(0)
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  assigneeId     String?
+  assignee       User?         @relation("LeadAssignee", fields: [assigneeId], references: [id])
+  creatorId      String
+  creator        User          @relation("LeadCreator", fields: [creatorId], references: [id])
+  history        LeadHistory[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([organizationId])
+}
+
+model LeadHistory {
+  id        String   @id @default(uuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  action    String
+  detail    String?
+  createdAt DateTime @default(now())
+}
+
+model Project {
+  id             String        @id @default(uuid())
+  name           String
+  description    String?
+  status         String        @default("PLANNING")
+  healthScore    Int           @default(100)
+  budget         Float?
+  startDate      DateTime?
+  endDate        DateTime?
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  managerId      String?
+  manager        User?         @relation("ProjectManager", fields: [managerId], references: [id])
+  clientId       String?
+  client         ClientProfile? @relation(fields: [clientId], references: [id])
+  tasks          Task[]
+  milestones     Milestone[]
+  contracts      Contract[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([organizationId])
+}
+
+model Task {
+  id          String    @id @default(uuid())
+  title       String
+  description String?
+  status      String    @default("TODO")
+  priority    String    @default("MEDIUM")
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assigneeId  String?
+  assignee    User?     @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  dueDate     DateTime?
+  comments    Comment[]
+  timeLogs    TimeLog[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Milestone {
+  id          String    @id @default(uuid())
+  title       String
+  description String?
+  dueDate     DateTime
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  isCompleted Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+}
+
+model TimeLog {
+  id          String   @id @default(uuid())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  durationMin Int
+  description String?
+  loggedAt    DateTime @default(now())
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Invoice {
+  id             String        @id @default(uuid())
+  invoiceNumber  String        @unique
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  clientId       String
+  client         ClientProfile @relation(fields: [clientId], references: [id])
+  amount         Float
+  gst            Float         @default(0.0)
+  dueDate        DateTime
+  status         String        @default("DRAFT")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([organizationId])
+}
+
+model Contract {
+  id             String        @id @default(uuid())
+  title          String
+  content        String
+  clientId       String
+  client         ClientProfile @relation(fields: [clientId], references: [id])
+  projectId      String?
+  project        Project?      @relation(fields: [projectId], references: [id])
+  status         String        @default("DRAFT")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model Attendance {
+  id                String          @id @default(uuid())
+  employeeProfileId String
+  employee          EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  checkIn           DateTime        @default(now())
+  checkOut          DateTime?
+  status            String          @default("PRESENT")
+}
+
+model Leave {
+  id                String          @id @default(uuid())
+  employeeProfileId String
+  employee          EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  startDate         DateTime
+  endDate           DateTime
+  type              String          @default("CASUAL")
+  status            String          @default("PENDING")
+  reason            String?
+  createdAt         DateTime        @default(now())
+}
+
+model Document {
+  id                String          @id @default(uuid())
+  employeeProfileId String
+  employee          EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  name              String
+  fileUrl           String
+  uploadedAt        DateTime        @default(now())
+}
+
+model WebMonitor {
+  id             String        @id @default(uuid())
+  name           String
+  url            String
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  isActive       Boolean       @default(true)
+  checkInterval  Int           @default(5)
+  sslExpiry      DateTime?
+  domainExpiry   DateTime?
+  lastPingStatus Int?
+  lastChecked    DateTime?
+  uptimeRatio    Float         @default(100.0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([organizationId])
+}
+
+model Ticket {
+  id             String       @id @default(uuid())
+  subject        String
+  description    String
+  status         String       @default("OPEN") // Stored as string, typed as TicketStatus in app
+  priority       String       @default("LOW")
+  clientId       String
+  client         User         @relation("TicketClient", fields: [clientId], references: [id])
+  agentId        String?
+  agent          User?        @relation("TicketAgent", fields: [agentId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Automation {
+  id             String       @id @default(uuid())
+  name           String
+  isActive       Boolean      @default(true)
+  trigger        String
+  actions        String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String
+  resource  String
+  payload   String?
+  createdAt DateTime @default(now())
+}
