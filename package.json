@@ -1,0 +1,13 @@
+{
+  "name": "vexor-workspace-api-root",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=@vexor/types && npm run build --workspace=@vexor/db && npm run build --workspace=vexor-api",
+    "start": "npm run start --workspace=vexor-api"
+  }
+}
