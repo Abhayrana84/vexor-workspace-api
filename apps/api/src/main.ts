@@ -7,6 +7,8 @@ import { ValidationPipe } from '@nestjs/common';
 import * as cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 
+import { NestExpressApplication } from '@nestjs/platform-express';
+
 async function bootstrap() {
   // Enforce JWT_SECRET configuration on bootstrap
   if (!process.env.JWT_SECRET) {
@@ -14,7 +16,9 @@ async function bootstrap() {
     process.exit(1);
   }
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.useBodyParser('json', { limit: '10mb' });
+  app.useBodyParser('urlencoded', { extended: true, limit: '10mb' });
   app.setGlobalPrefix('api');
   app.use(cookieParser());
   app.use(helmet());
