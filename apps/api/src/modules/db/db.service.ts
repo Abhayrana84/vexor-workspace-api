@@ -20,8 +20,6 @@ export class DbService extends PrismaClient implements OnModuleInit, OnModuleDes
             // Enforce organization isolation filter on all multi-tenant tables
             const tenantModels = ['User', 'ClientProfile', 'Lead', 'Project', 'Invoice', 'WebMonitor', 'Automation'];
             if (organizationId && tenantModels.includes(model)) {
-              args.where = args.where || {};
-              
               if (operation === 'create') {
                 args.data = args.data || {};
                 args.data.organizationId = organizationId;
@@ -34,6 +32,7 @@ export class DbService extends PrismaClient implements OnModuleInit, OnModuleDes
                   args.data.organizationId = organizationId;
                 }
               } else {
+                args.where = args.where || {};
                 args.where.organizationId = organizationId;
               }
             }
