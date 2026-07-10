@@ -26,6 +26,10 @@ export class CreateUserDto {
 
   @IsOptional()
   @IsString()
+  bio?: string;
+
+  @IsOptional()
+  @IsString()
   department?: string;
 
   @IsOptional()
@@ -53,6 +57,10 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  bio?: string;
 
   @IsOptional()
   @IsString()
