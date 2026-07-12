@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Request
+  Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request
 } from '@nestjs/common';
 import { HrmsService } from './hrms.service';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
@@ -33,54 +33,74 @@ export class HrmsController {
     return this.hrmsService.getEmployeeProfile(req.user.id);
   }
 
-  // ── Create user (Founder + HR) ───────────────────────────────────────────
+  // ── Create user (Founder + HR) ──────────────────────────────────────────
   @Roles(Role.FOUNDER, Role.CO_FOUNDER, Role.ADMIN, Role.HR)
   @Post('users')
   createUser(@Request() req: any, @Body() body: CreateUserDto) {
     return this.hrmsService.createUser(req.user.organizationId, req.user.role, body);
   }
 
-  // ── Update user (Founder + HR) ───────────────────────────────────────────
+  // ── Update user (Founder + HR) ──────────────────────────────────────────
   @Roles(Role.FOUNDER, Role.CO_FOUNDER, Role.ADMIN, Role.HR)
   @Patch('users/:id')
   updateUser(@Param('id') id: string, @Request() req: any, @Body() body: UpdateUserDto) {
     return this.hrmsService.updateUser(id, req.user.role, body);
   }
 
-  // ── Deactivate / delete user (Founder + HR) ──────────────────────────────
+  // ── Deactivate (soft) or Permanently delete user ─────────────────────────
   @Roles(Role.FOUNDER, Role.CO_FOUNDER, Role.ADMIN, Role.HR)
   @Delete('users/:id')
-  deleteUser(@Param('id') id: string, @Request() req: any) {
+  deleteUser(
+    @Param('id') id: string,
+    @Query('permanent') permanent: string,
+    @Request() req: any,
+  ) {
+    if (permanent === 'true') {
+      return this.hrmsService.hardDeleteUser(id, req.user.role);
+    }
     return this.hrmsService.deleteUser(id, req.user.role);
   }
 
-  // ── Reset password (Founder + HR) ────────────────────────────────────────
+  // ── Re-activate user ────────────────────────────────────────────────────
+  @Roles(Role.FOUNDER, Role.CO_FOUNDER, Role.ADMIN, Role.HR)
+  @Post('users/:id/reactivate')
+  reactivateUser(@Param('id') id: string, @Request() req: any) {
+    return this.hrmsService.reactivateUser(id, req.user.role);
+  }
+
+  // ── Blacklist user ──────────────────────────────────────────────────────
+  @Roles(Role.FOUNDER, Role.CO_FOUNDER, Role.ADMIN, Role.HR)
+  @Post('users/:id/blacklist')
+  blacklistUser(@Param('id') id: string, @Request() req: any) {
+    return this.hrmsService.blacklistUser(id, req.user.role);
+  }
+
+  // ── Reset password (Founder + HR) ───────────────────────────────────────
   @Roles(Role.FOUNDER, Role.CO_FOUNDER, Role.ADMIN, Role.HR)
   @Patch('users/:id/reset-password')
   resetPassword(@Param('id') id: string, @Request() req: any, @Body() body: ResetPasswordDto) {
     return this.hrmsService.resetUserPassword(id, body.newPassword, req.user.role);
   }
 
-  // ── Grant permissions (FOUNDER ONLY) ─────────────────────────────────────
+  // ── Grant permissions (FOUNDER / CO_FOUNDER ONLY) ───────────────────────
   @Roles(Role.FOUNDER, Role.CO_FOUNDER)
   @Patch('users/:id/permissions')
   grantPermissions(@Param('id') id: string, @Body() body: GrantPermissionsDto) {
     return this.hrmsService.grantPermissions(id, body.permissions);
   }
 
-  // ── Attendance ────────────────────────────────────────────────────────────
+  // ── Attendance ───────────────────────────────────────────────────────────
   @Post('attendance/check-in')
   checkIn(@Request() req: any) {
     return this.hrmsService.checkIn(req.user.id);
   }
 
-  // ── Attendance Check-Out ──────────────────────────────────────────────────
   @Post('attendance/check-out')
   checkOut(@Request() req: any) {
     return this.hrmsService.checkOut(req.user.id);
   }
 
-  // ── Leaves ────────────────────────────────────────────────────────────────
+  // ── Leaves ───────────────────────────────────────────────────────────────
   @Post('leaves')
   requestLeave(@Request() req: any, @Body() body: RequestLeaveDto) {
     return this.hrmsService.requestLeave(req.user.id, body);
