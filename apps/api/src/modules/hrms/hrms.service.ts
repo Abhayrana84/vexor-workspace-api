@@ -4,6 +4,9 @@ import {
 import { DbService } from '../db/db.service';
 import * as bcrypt from 'bcryptjs';
 
+const FOUNDER_ROLES = ['FOUNDER', 'CO_FOUNDER'];
+const HR_ROLES = ['HR', 'HR_MANAGER'];
+
 @Injectable()
 export class HrmsService {
   constructor(private db: DbService) {}
@@ -17,7 +20,7 @@ export class HrmsService {
         id: true, userId: true, employeeNumber: true, email: true,
         firstName: true, lastName: true, role: true, phone: true,
         bio: true, department: true, avatarUrl: true,
-        permissions: true, isActive: true, createdAt: true,
+        permissions: true, isActive: true, isBlacklisted: true, createdAt: true,
         employeeProfile: { select: { id: true } },
       },
       orderBy: { employeeNumber: 'asc' },
@@ -41,7 +44,8 @@ export class HrmsService {
             id: true, userId: true, employeeNumber: true,
             firstName: true, lastName: true, email: true,
             phone: true, bio: true, department: true,
-            avatarUrl: true, role: true, permissions: true, isActive: true,
+            avatarUrl: true, role: true, permissions: true,
+            isActive: true, isBlacklisted: true,
           },
         },
         attendance: { orderBy: { checkIn: 'desc' }, take: 10 },
@@ -68,7 +72,7 @@ export class HrmsService {
     if (existing) throw new BadRequestException('Email already in use');
 
     // HR cannot create FOUNDER or CO_FOUNDER
-    if (requesterRole === 'HR_MANAGER' && ['FOUNDER', 'CO_FOUNDER'].includes(data.role)) {
+    if (HR_ROLES.includes(requesterRole) && FOUNDER_ROLES.includes(data.role)) {
       throw new ForbiddenException('HR cannot create Founder-level accounts');
     }
 
@@ -87,7 +91,7 @@ export class HrmsService {
     const defaultPerms = {
       crm: ['FOUNDER','CO_FOUNDER','ADMIN','SALES_MANAGER','SALES_EXECUTIVE'].includes(data.role),
       finance: ['FOUNDER','CO_FOUNDER','ADMIN','FINANCE_MANAGER'].includes(data.role),
-      hrms: ['FOUNDER','CO_FOUNDER','ADMIN','HR_MANAGER'].includes(data.role),
+      hrms: ['FOUNDER','CO_FOUNDER','ADMIN','HR','HR_MANAGER'].includes(data.role),
       projects: ['FOUNDER','CO_FOUNDER','ADMIN','PROJECT_MANAGER','DEVELOPER'].includes(data.role),
       monitoring: ['FOUNDER','CO_FOUNDER','ADMIN','DEVELOPER'].includes(data.role),
       ai: true,
@@ -107,6 +111,7 @@ export class HrmsService {
         userId,
         employeeNumber: nextNumber,
         isActive: true,
+        isBlacklisted: false,
         permissions: JSON.stringify(defaultPerms),
       },
     });
@@ -134,25 +139,73 @@ export class HrmsService {
     if (!target) throw new NotFoundException('User not found');
 
     // HR cannot change FOUNDER or CO_FOUNDER
-    if (requesterRole === 'HR_MANAGER' && ['FOUNDER', 'CO_FOUNDER'].includes(target.role)) {
+    if (HR_ROLES.includes(requesterRole) && FOUNDER_ROLES.includes(target.role)) {
       throw new ForbiddenException('HR cannot edit Founder-level accounts');
     }
 
     return this.db.user.update({ where: { id: userId }, data });
   }
 
-  // ─── Delete user (Founder + HR) ─────────────────────────────────────────
+  // ─── Deactivate (soft delete) ────────────────────────────────────────────
 
   async deleteUser(userId: string, requesterRole: string) {
     const target = await this.db.user.findUnique({ where: { id: userId } });
     if (!target) throw new NotFoundException('User not found');
 
-    if (requesterRole === 'HR_MANAGER' && ['FOUNDER', 'CO_FOUNDER'].includes(target.role)) {
-      throw new ForbiddenException('HR cannot delete Founder-level accounts');
+    if (HR_ROLES.includes(requesterRole) && FOUNDER_ROLES.includes(target.role)) {
+      throw new ForbiddenException('HR cannot deactivate Founder-level accounts');
     }
 
-    // Soft delete — deactivate instead of hard delete
     return this.db.user.update({ where: { id: userId }, data: { isActive: false } });
+  }
+
+  // ─── Re-activate ────────────────────────────────────────────────────────
+
+  async reactivateUser(userId: string, requesterRole: string) {
+    const target = await this.db.user.findUnique({ where: { id: userId } });
+    if (!target) throw new NotFoundException('User not found');
+
+    if (target.isBlacklisted) {
+      throw new ForbiddenException('Blacklisted users cannot be re-activated');
+    }
+    if (HR_ROLES.includes(requesterRole) && FOUNDER_ROLES.includes(target.role)) {
+      throw new ForbiddenException('HR cannot re-activate Founder-level accounts');
+    }
+
+    return this.db.user.update({ where: { id: userId }, data: { isActive: true } });
+  }
+
+  // ─── Blacklist user ─────────────────────────────────────────────────────
+
+  async blacklistUser(userId: string, requesterRole: string) {
+    const target = await this.db.user.findUnique({ where: { id: userId } });
+    if (!target) throw new NotFoundException('User not found');
+
+    if (HR_ROLES.includes(requesterRole) && FOUNDER_ROLES.includes(target.role)) {
+      throw new ForbiddenException('HR cannot blacklist Founder-level accounts');
+    }
+
+    return this.db.user.update({
+      where: { id: userId },
+      data: { isActive: false, isBlacklisted: true },
+    });
+  }
+
+  // ─── Permanently delete ─────────────────────────────────────────────────
+
+  async hardDeleteUser(userId: string, requesterRole: string) {
+    const target = await this.db.user.findUnique({ where: { id: userId } });
+    if (!target) throw new NotFoundException('User not found');
+
+    // Only Founders can permanently delete; HR cannot
+    if (!FOUNDER_ROLES.includes(requesterRole) && requesterRole !== 'ADMIN') {
+      throw new ForbiddenException('Only Founders and Admins can permanently delete accounts');
+    }
+    if (FOUNDER_ROLES.includes(target.role)) {
+      throw new ForbiddenException('Cannot permanently delete a Founder account');
+    }
+
+    return this.db.user.delete({ where: { id: userId } });
   }
 
   // ─── Grant permissions (FOUNDER ONLY) ───────────────────────────────────
@@ -173,7 +226,7 @@ export class HrmsService {
     const target = await this.db.user.findUnique({ where: { id: targetUserId } });
     if (!target) throw new NotFoundException('User not found');
 
-    if (requesterRole === 'HR_MANAGER' && ['FOUNDER', 'CO_FOUNDER'].includes(target.role)) {
+    if (HR_ROLES.includes(requesterRole) && FOUNDER_ROLES.includes(target.role)) {
       throw new ForbiddenException('HR cannot reset Founder-level passwords');
     }
 
