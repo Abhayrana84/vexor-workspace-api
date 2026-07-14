@@ -5,9 +5,16 @@ import { DbService } from '../db/db.service';
 export class CrmService {
   constructor(private db: DbService) {}
 
-  async getLeads(orgId: string) {
+  async getLeads(orgId: string, user?: any) {
+    const isManager = !user || ['FOUNDER', 'CO_FOUNDER', 'ADMIN', 'SALES_MANAGER'].includes(user.role);
+    const whereClause: any = { organizationId: orgId };
+
+    if (!isManager) {
+      whereClause.assigneeId = user.id;
+    }
+
     return this.db.lead.findMany({
-      where: { organizationId: orgId },
+      where: whereClause,
       include: {
         assignee: {
           select: { id: true, firstName: true, lastName: true, email: true },
