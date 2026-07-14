@@ -11,19 +11,19 @@ import { CreateLeadDto, UpdateLeadStatusDto, AssignLeadDto } from './dto/crm.dto
 export class CrmController {
   constructor(private crmService: CrmService) {}
 
-  @Roles(Role.FOUNDER, Role.CO_FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.SALES_EXECUTIVE)
+  @Roles(Role.FOUNDER, Role.CO_FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.SALES_EXECUTIVE, Role.DEVELOPER)
   @Get('leads')
   async getLeads(@Request() req: any) {
-    return this.crmService.getLeads(req.user.organizationId);
+    return this.crmService.getLeads(req.user.organizationId, req.user);
   }
 
-  @Roles(Role.FOUNDER, Role.CO_FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.SALES_EXECUTIVE)
+  @Roles(Role.FOUNDER, Role.CO_FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.SALES_EXECUTIVE, Role.DEVELOPER)
   @Post('leads')
   async createLead(@Request() req: any, @Body() body: CreateLeadDto) {
     return this.crmService.createLead(req.user.organizationId, req.user.id, body);
   }
 
-  @Roles(Role.FOUNDER, Role.CO_FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.SALES_EXECUTIVE)
+  @Roles(Role.FOUNDER, Role.CO_FOUNDER, Role.ADMIN, Role.SALES_MANAGER, Role.SALES_EXECUTIVE, Role.DEVELOPER)
   @Patch('leads/:id/status')
   async updateStatus(@Param('id') id: string, @Body() body: UpdateLeadStatusDto) {
     return this.crmService.updateLeadStatus(id, body.status, body.detail);
